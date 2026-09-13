@@ -1,0 +1,30 @@
+{
+  "name": "image-croppe",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "bin": {
+      "cropper": "./cropper.mjs"
+    },
+  "scripts": {
+      "crop": "node cropper.mjs"
+    },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.4.1",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.4.1",
+  "type": "module",
+  "dependencies": {
+    "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2"
+  }
+}
