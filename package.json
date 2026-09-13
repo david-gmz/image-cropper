@@ -1,17 +1,28 @@
 {
-  "name": "image-croppe",
+  "name": "image-cropper",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Standalone CLI to generate 3 mobile + 3 desktop crops in webp + avif - separated from PHP project",
+  "type": "module",
   "bin": {
-      "cropper": "./cropper.mjs"
-    },
+    "cropper": "./cropper.mjs",
+    "image-cropper": "./cropper.mjs"
+  },
   "scripts": {
-      "crop": "node cropper.mjs"
-    },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+    "crop": "node cropper.mjs",
+    "crop:mobile": "node cropper.mjs --mobile=./input-mobile --out=./dist",
+    "crop:desktop": "node cropper.mjs --desktop=./input-desktop --out=./dist",
+    "clean": "rm -rf dist/*"
+  },
+  "keywords": [
+    "sharp",
+    "image",
+    "crop",
+    "webp",
+    "avif",
+    "responsive",
+    "cli"
+  ],
+  "license": "MIT",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
@@ -20,7 +31,6 @@
     }
   },
   "packageManager": "pnpm@12.4.1",
-  "type": "module",
   "dependencies": {
     "sharp": "^0.35.4"
   },
