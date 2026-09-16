@@ -1,179 +1,146 @@
 # image-cropper
 
-Tiny standalone CLI tool to generate responsive crops for mobile and desktop.
-Built with `sharp` + `pnpm`, separated from your main PHP project - same idea as an icon builder.
+Tiny, generic CLI cropper. One tool, many projects.
 
-It solves the PHP GD/Imagick AVIF problem: your PHP app can keep generating JPG/WEBP, while this tool generates optimized `webp` + `avif` offline and you just copy `dist/` into your project.
+Built with `sharp` + `pnpm`. Separated from your PHP projects - same idea as an icon builder. You run it locally/CI, it generates `webp` + `avif`, you copy `dist/` to production. No Node runtime on server.
 
-## Features
+Solves the PHP GD/Imagick AVIF problem and the `${name}-${w}` collision problem by using subfolders per profile.
 
-- 3 mobile + 3 desktop sizes (fully configurable)
-- Separate input folders: `input-mobile` and `input-desktop` - use different shots when needed
-- Outputs `webp` (compatibility) + `avif` (30-50% smaller) for each size
-- Aspect ratio driven by constants: `RELATION_MOBILE` and `RELATION_DESKTOP`
-- `w = x`, `h = y` - cartesian, x always first
-- Smart crop with `attention` (face/subject detection)
-- Generates `manifest.json` like a sprite/icon manifest
-- No runtime dependency in your PHP project
+## How it works: 1 tool + 1 config per project
+
+Don't make a `cropper.mjs` per project. Keep one generic `cropper.mjs` and add a `cropper.config.mjs` per project, like `tailwind.config.js`.
+
+```
+my-project/
+├── cropper.config.mjs  <- PROFILES + SERVICES for this project
+├── input/
+│   ├── box-lunch/
+│   │   ├── hero_mobile/
+│   │   └── menu_mobile/
+│   └── canapes/
+└── dist/               <- generated
+```
+
+If `cropper.config.mjs` exists, it is loaded. If not, defaults are used.
+
+```js
+// cropper.config.mjs
+export const INPUT_ROOT = "./input";
+export const OUTPUT_STRUCTURE = "service/profile"; // service/profile | profile | flat
+
+export const SERVICES = ["box-lunch", "canapes", "coffee-break"];
+
+export const PROFILES = {
+  hero_mobile: { ratio: 4/5, widths: [412, 824], webpQ: 75, avifQ: 55 },
+  hero_desktop: { ratio: 16/9, widths: [1024, 1440], webpQ: 75, avifQ: 55 },
+  menu_mobile: { ratio: 3/2, widths: [390, 780], webpQ: 70, avifQ: 50 },
+};
+```
+
+- `w = x, h = y` - cartesian, x always first. `h = Math.round(w / ratio)`
+- `base = ${name}-${w}` - no profile in filename, collision avoided by folder
 
 ## Requirements
 
-- Node.js >= 18
-- pnpm
+- Node.js >= 24 (you're on v24.21.0)
+- pnpm >= 12.4.1 (you're on 12.4.1)
+- sharp ^0.35.4
 
 ## Install
 
 ```bash
-git clone <your-repo>
+git clone https://github.com/david-gmz/image-cropper
 cd image-cropper
 pnpm install
 ```
 
-Sharp includes prebuilt binaries. If you get native issues:
+## Examples
+
+Three example configs are included:
+
+- `cropper.config.delisnack.mjs` - your delisnack project with SERVICES
+- `cropper.config.generic.mjs` - flat mode, no SERVICES
+- `cropper.config.blog.mjs` - posts / projects / authors
+
+Copy one:
 
 ```bash
-pnpm rebuild sharp
-```
-
-## Folder structure
-
-```
-.
-├── input-mobile/   # put vertical / mobile shots here
-├── input-desktop/  # put horizontal / desktop shots here
-├── dist/           # generated files - copy this to your PHP project
-├── cropper.mjs
-└── package.json
-```
-
-## Quick start
-
-1. Drop images:
-
-```bash
-# only mobile shot -> generates 6 files (3 sizes x 2 formats)
-cp ~/photos/hero-mobile.jpg input-mobile/hero.jpg
-
-# only desktop shot -> generates 6 files
-cp ~/photos/hero-desktop.jpg input-desktop/hero.jpg
-
-# different shots with same name -> generates 12 files (6 mobile + 6 desktop)
-```
-
-2. Run:
-
-```bash
-pnpm crop
+cp cropper.config.delisnack.mjs cropper.config.mjs
 # or
-pnpm run crop
+cp cropper.config.generic.mjs cropper.config.mjs
 ```
 
-Output:
-
-```
-✓ MOBILE hero.jpg -> 6 files
-✓ DESKTOP hero.jpg -> 6 files
-Done. 1 images processed to ./dist
-```
-
-3. Copy to your PHP project:
+## CLI
 
 ```bash
-cp -r dist/* ../my-php-project/public/images/cropped/
+pnpm crop                          # all services/profiles
+pnpm crop --service=box-lunch      # only box-lunch
+pnpm crop --manifest               # + manifest.json
+pnpm crop --config=./my.config.mjs --out=./public/cropped
+
+# npm scripts
+pnpm run crop:box-lunch
+pnpm run deploy   # crop + copy to Laragon
 ```
 
-## Configuration
+Flags:
+- `--service=all|box-lunch|canapes`  filter service (only if SERVICES defined)
+- `--out=path` output root (default ./dist)
+- `--config=path` config file (default ./cropper.config.mjs)
+- `--manifest` generate manifest.json
 
-Edit `cropper.mjs` - all sizes are derived from relations:
+## Output structure
 
-```js
-// w / h relation
-const RELATION_MOBILE = 0.75; // 3/4 portrait -> w=320, h=427
-const RELATION_DESKTOP = 16/9; // 16:9 landscape
-
-const s = (w, rel) => ({ w, h: Math.round(w / rel) });
-
-const MOBILE_SIZES = {
-  mobile_sm: s(320, RELATION_MOBILE),
-  mobile_md: s(375, RELATION_MOBILE),
-  mobile_lg: s(414, RELATION_MOBILE),
-};
-
-const DESKTOP_SIZES = {
-  desktop_sm: s(1024, RELATION_DESKTOP),
-  desktop_md: s(1440, RELATION_DESKTOP),
-  desktop_lg: s(1920, RELATION_DESKTOP),
-};
-```
-
-Change `RELATION_*` once, all sizes update. Sharp requires integer dimensions, so we use `Math.round()`.
-
-## CLI args
-
-```bash
-# custom folders
-pnpm crop --mobile=./assets/mobile --desktop=./assets/desktop --out=./public/cropped
-
-# options:
-# --mobile=path   mobile input folder (default: ./input-mobile)
-# --desktop=path  desktop input folder (default: ./input-desktop)
-# --out=path      output folder (default: ./dist)
-```
-
-## Output & manifest
-
-`dist/` contains:
+With `OUTPUT_STRUCTURE = "service/profile"` (delisnack):
 
 ```
-hero_mobile_sm_320x427.webp
-hero_mobile_sm_320x427.avif
-hero_desktop_lg_1920x1080.webp
-hero_desktop_lg_1920x1080.avif
-manifest.json
+dist/
+├── box-lunch/
+│   ├── hero_mobile/
+│   │   ├── hero-412.webp
+│   │   └── hero-412.avif
+│   ├── hero_desktop/
+│   └── menu_mobile/
+│       ├── ejecutivo-390.webp
+│       └── gourmet-390.webp
+├── canapes/
+└── manifest.json  # only with --manifest
 ```
 
-`manifest.json`:
+With `OUTPUT_STRUCTURE = "profile"` (generic):
+
+```
+dist/
+├── cards_mobile/
+│   ├── burger-390.webp
+│   └── burger-390.avif
+└── cards_desktop/
+```
+
+No more `${name}-${w}` collisions because `box-lunch/menu_mobile/ejecutivo-390` and `box-lunch/menu_desktop/ejecutivo-360` live in different folders.
+
+## Copy / Deploy to PHP project
+
+In `package.json`:
 
 ```json
-{
-  "hero": [
-    {
-      "variant": "mobile_md",
-      "x": 375,
-      "y": 500,
-      "webp": "hero_mobile_md_375x500.webp",
-      "avif": "hero_mobile_md_375x500.avif"
-    }
-  ]
+"scripts": {
+  "copy": "node -e \"... copy dist to Laragon ...\"",
+  "deploy": "node cropper.mjs --service=all --manifest && pnpm run copy"
 }
 ```
 
-## Usage in PHP / HTML
-
-```html
-<picture>
-  <source media="(max-width: 768px)" srcset="/images/cropped/hero_mobile_md_375x500.avif" type="image/avif">
-  <source media="(max-width: 768px)" srcset="/images/cropped/hero_mobile_md_375x500.webp" type="image/webp">
-  <source media="(min-width: 769px)" srcset="/images/cropped/hero_desktop_lg_1920x1080.avif" type="image/avif">
-  <source media="(min-width: 769px)" srcset="/images/cropped/hero_desktop_lg_1920x1080.webp" type="image/webp">
-  <img src="/images/cropped/hero_desktop_lg_1920x1080.webp" alt="Hero">
-</picture>
-```
-
-In PHP:
-
-```php
-$manifest = json_decode(file_get_contents('dist/manifest.json'), true);
-foreach ($manifest['hero'] as $crop) {
-  // $crop['x'], $crop['y'], $crop['avif'], $crop['webp']
-}
+```bash
+pnpm run copy
+# custom dest
+DEST=C:/laragon/www/other-project/public/assets pnpm run copy
 ```
 
 ## Why separate tool?
 
-- PHP 8.5.9 GD often lacks AVIF. Sharp generates AVIF natively.
-- No Node runtime needed in production. You run the cropper locally/CI, commit `dist/`.
-- Same workflow as your lucide/sprit-icons builder: build once, include the result.
+- PHP 8.5 GD often lacks AVIF. Sharp does it.
+- No Node in production. Build once, commit dist.
+- Reusable across all your projects via config.
 
 ## License
 
