@@ -1,5 +1,6 @@
 dist/
 node_modules/
 temp/
-pnpm-lock.yaml
+*-lock.yaml
 .git/
+input-*/
