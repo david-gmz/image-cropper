@@ -2,8 +2,8 @@
 import sharp from "sharp";
 import fs from "fs/promises";
 import path from "path";
+import { pathToFileURL } from "url";
 
-// pnpm crop --cards_mobile=./my-cards-mobile --hero_desktop=./my-hero-desktop --out=./dist --manifest
 const args = Object.fromEntries(
     process.argv
         .slice(2)
@@ -11,64 +11,32 @@ const args = Object.fromEntries(
         .map(([k, v]) => [k, v || true])
 );
 
-const OUTPUT_DIR = args.out || "./dist";
+const CONFIG_PATH = args.config || "./cropper.config.mjs";
+const OUTPUT_ROOT = args.out || "./dist";
 const GENERATE_MANIFEST = !!args.manifest;
+const FILTER_SERVICE = args.service || "all";
+const FILTER_PROFILE = args.profile || "all";
 
-// w = x, h = y - cartesian, x always first
 const s = (w, ratio) => ({ w, h: Math.round(w / ratio) });
 
-const PROFILES = {
+let config = {};
+try {
+    const full = path.resolve(CONFIG_PATH);
+    await fs.access(full);
+    config = await import(pathToFileURL(full).href);
+    console.log(`✓ Loaded config: ${CONFIG_PATH}`);
+} catch {
+    console.log(`ℹ No config found at ${CONFIG_PATH}, using defaults`);
+}
+
+const DEFAULT_PROFILES = {
     cards_mobile: {
-        dir: args.cards_mobile || "./input-cards-mobile",
-        ratio: 2, // 2:1
-        widths: [390, 780, 1190],
+        ratio: 3 / 2,
+        widths: [390, 780, 1170],
         webpQ: 70,
         avifQ: 50
     },
     cards_desktop: {
-        dir: args.cards_desktop || "./input-cards-desktop",
-        ratio: 3 / 2, // 3:2
-        widths: [360, 720],
-        webpQ: 70,
-        avifQ: 50
-    },
-    hero_mobile: {
-        dir: args.hero_mobile || "./input-hero-mobile",
-        ratio: 1 / 2, // portrait
-        widths: [412, 824, 1648],
-        webpQ: 75,
-        avifQ: 55
-    },
-    hero_desktop: {
-        dir: args.hero_desktop || "./input-hero-desktop",
-        ratio: 16 / 9,
-        widths: [1024, 1440],
-        webpQ: 75,
-        avifQ: 55
-    },
-    // hero_service_mobile: {
-    //     dir: args.hero_service_mobile || "./input-hero-service-mobile",
-    //     ratio: 5 / 4, // portrait
-    //     widths: [390, 780],
-    //     webpQ: 80,
-    //     avifQ: 55
-    // },
-    hero_service_desktop: {
-        dir: args.hero_service_desktop || "./input-hero-service-desktop",
-        ratio: 5 / 4,
-        widths: [480, 960],
-        webpQ: 80,
-        avifQ: 55
-    },
-    menu_mobile: {
-        dir: args.menu_mobile || "./input-menu-mobile",
-        ratio: 3 / 2,
-        widths: [390, 780, 1190],
-        webpQ: 70,
-        avifQ: 50
-    },
-    menu_desktop: {
-        dir: args.menu_desktop || "./input-menu-desktop",
         ratio: 2,
         widths: [360, 720],
         webpQ: 70,
@@ -76,7 +44,13 @@ const PROFILES = {
     }
 };
 
-await fs.mkdir(OUTPUT_DIR, { recursive: true });
+const PROFILES = config.PROFILES || DEFAULT_PROFILES;
+const SERVICES = config.SERVICES || null;
+const INPUT_ROOT = config.INPUT_ROOT || "./input";
+const OUTPUT_STRUCTURE =
+    config.OUTPUT_STRUCTURE || (SERVICES ? "service/profile" : "profile");
+
+await fs.mkdir(OUTPUT_ROOT, { recursive: true });
 
 const list = async dir => {
     try {
@@ -90,59 +64,122 @@ const list = async dir => {
 
 const manifest = {};
 
-for (const [profileName, p] of Object.entries(PROFILES)) {
-    const files = await list(p.dir);
-    if (files.length === 0) continue;
-
-    // each profile gets its own subfolder -> no collision for `${name}-${w}`
-    const profileOutDir = path.join(OUTPUT_DIR, profileName);
-    await fs.mkdir(profileOutDir, { recursive: true });
-
+async function processOne(
+    inputDir,
+    outDir,
+    profileName,
+    profile,
+    serviceName = null
+) {
+    const files = await list(inputDir);
+    if (files.length === 0) return false;
+    await fs.mkdir(outDir, { recursive: true });
     for (const file of files) {
         const name = path.parse(file).name;
-        const inputPath = path.join(p.dir, file);
-        manifest[name] ??= [];
-
-        for (const w of p.widths) {
-            const { h } = s(w, p.ratio);
-            const base = `${name}-${w}`; // x is in filename, y is derived from ratio
-
+        const inputPath = path.join(inputDir, file);
+        const key = serviceName ? `${serviceName}/${name}` : name;
+        manifest[key] ??= [];
+        for (const w of profile.widths) {
+            const { h } = s(w, profile.ratio);
+            const base = `${name}-${w}`;
             const pipeline = sharp(inputPath).resize(w, h, {
                 fit: "cover",
                 position: "attention"
             });
-
             await pipeline
                 .clone()
-                .webp({ quality: p.webpQ })
-                .toFile(path.join(profileOutDir, `${base}.webp`));
+                .webp({ quality: profile.webpQ })
+                .toFile(path.join(outDir, `${base}.webp`));
             await pipeline
                 .clone()
-                .avif({ quality: p.avifQ, effort: 4 })
-                .toFile(path.join(profileOutDir, `${base}.avif`));
-
-            manifest[name].push({
+                .avif({ quality: profile.avifQ, effort: 4 })
+                .toFile(path.join(outDir, `${base}.avif`));
+            const relWebp = serviceName
+                ? `${serviceName}/${profileName}/${base}.webp`
+                : `${profileName}/${base}.webp`;
+            const relAvif = serviceName
+                ? `${serviceName}/${profileName}/${base}.avif`
+                : `${profileName}/${base}.avif`;
+            manifest[key].push({
+                service: serviceName,
                 profile: profileName,
                 x: w,
                 y: h,
-                webp: `${profileName}/${base}.webp`,
-                avif: `${profileName}/${base}.avif`
+                webp: relWebp,
+                avif: relAvif
             });
         }
         console.log(
-            `✓ ${profileName.toUpperCase()} ${file} -> ${p.widths.length * 2} files in ${profileName}/`
+            `✓ ${serviceName ? serviceName + "/" : ""}${profileName} ${file} -> ${profile.widths.length * 2} files`
         );
     }
+    return true;
+}
+
+let didAny = false;
+
+if (SERVICES) {
+    const targetServices =
+        FILTER_SERVICE === "all" ? SERVICES : [FILTER_SERVICE];
+    const targetProfiles =
+        FILTER_PROFILE === "all" ? Object.keys(PROFILES) : [FILTER_PROFILE];
+
+    for (const service of targetServices) {
+        for (const profileName of targetProfiles) {
+            const p = PROFILES[profileName];
+            if (!p) {
+                console.log(`⚠ Profile not found: ${profileName}`);
+                continue;
+            }
+            const inputDir = path.join(INPUT_ROOT, service, profileName);
+            let outDir;
+            if (OUTPUT_STRUCTURE === "service/profile")
+                outDir = path.join(OUTPUT_ROOT, service, profileName);
+            else if (OUTPUT_STRUCTURE === "profile")
+                outDir = path.join(OUTPUT_ROOT, profileName);
+            else outDir = OUTPUT_ROOT;
+            const ok = await processOne(
+                inputDir,
+                outDir,
+                profileName,
+                p,
+                service
+            );
+            if (ok) didAny = true;
+        }
+    }
+} else {
+    const targetProfiles =
+        FILTER_PROFILE === "all" ? Object.keys(PROFILES) : [FILTER_PROFILE];
+    for (const profileName of targetProfiles) {
+        const p = PROFILES[profileName];
+        if (!p) {
+            console.log(`⚠ Profile not found: ${profileName}`);
+            continue;
+        }
+        const inputDir = path.join(INPUT_ROOT, profileName);
+        const outDir =
+            OUTPUT_STRUCTURE === "flat"
+                ? OUTPUT_ROOT
+                : path.join(OUTPUT_ROOT, profileName);
+        const ok = await processOne(inputDir, outDir, profileName, p, null);
+        if (ok) didAny = true;
+    }
+}
+
+if (!didAny) {
+    console.log(`\n⚠ No images found. Checked: ${INPUT_ROOT}/...`);
+    console.log(
+        `   Make sure you have: input/<service>/<profile>/  or input/<profile>/`
+    );
 }
 
 if (GENERATE_MANIFEST) {
     await fs.writeFile(
-        path.join(OUTPUT_DIR, "manifest.json"),
+        path.join(OUTPUT_ROOT, "manifest.json"),
         JSON.stringify(manifest, null, 2)
     );
     console.log(
         `\n✓ manifest.json written (${Object.keys(manifest).length} images)`
     );
-} else {
-    console.log("\nNo manifest generated. Use --manifest to create it.");
 }

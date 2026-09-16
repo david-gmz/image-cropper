@@ -1,6 +1,6 @@
 {
   "name": "image-cropper",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "description": "Generic reusable cropper - 1 tool + cropper.config.mjs per project - webp+avif - no collision",
   "type": "module",
   "bin": {
@@ -8,9 +8,11 @@
     "image-cropper": "./cropper.mjs"
   },
   "scripts": {
+    "init": "pwsh -File ./init-cropper.ps1",
+    "init:flat": "pwsh -Command \". ./init-cropper.ps1; New-CropperInputTree -Flat -WithReadme\"",
     "crop": "node cropper.mjs",
     "crop:manifest": "node cropper.mjs --manifest",
-    "crop:box-lunch": "node cropper.mjs --service=box-lunch",
+    "crop:box-lunch": "node cropper.mjs --service=box-lunch --manifest",
     "crop:all": "node cropper.mjs --service=all --manifest",
     "clean": "node -e \"import('fs-extra').then(m=>m.default.emptyDir('./dist'))\"",
     "copy": "node -e \"import fs from 'fs-extra'; const dest = process.env.DEST || 'C:/laragon/www/delisnack/public/assets/images/services'; await fs.ensureDir(dest); await fs.copy('./dist', dest, {overwrite:true}); console.log('\u2713 Copied to '+dest)\"",
@@ -18,12 +20,11 @@
   },
   "keywords": [
     "sharp",
-    "image",
-    "crop",
+    "image-cropper",
     "webp",
     "avif",
     "responsive",
-    "cli"
+    "config"
   ],
   "license": "MIT",
   "dependencies": {
@@ -37,5 +38,5 @@
     "node": ">=24.0.0",
     "pnpm": ">=12.4.1"
   },
-  "packageManager": "pnpm@12.4.2"
+  "packageManager": "pnpm@12.4.1"
 }
