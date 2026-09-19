@@ -1,3 +1,14 @@
+<#
+    .SYNOPSIS
+        PowerShell 7 helpers for image-cropper - init, clean, copy, deploy.
+
+    .DESCRIPTION
+        5 functions for the image-cropper tool. No fs-extra needed, pure PowerShell file ops (faster on Windows).
+
+    .NOTES
+        Requires PowerShell 7 (pwsh)
+        Dot-source: . ./init-cropper.ps1
+#>
 
 function New-CropperInputTree {
     <#
@@ -131,7 +142,7 @@ function New-CropperInputTree {
                 if ($PSCmdlet.ShouldProcess($dir, "Create directory")) {
                     New-Item -ItemType Directory -Path $dir -Force | Out-Null
                     $created++
-                    Write-Host "OK $dir" -ForegroundColor Green
+                    Write-Host "✓ $dir" -ForegroundColor Green
                     if ($WithReadme) {
                         $readme = Join-Path $dir "README.md"
                         if (-not (Test-Path $readme)) {

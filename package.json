@@ -1,7 +1,7 @@
 {
   "name": "image-cropper",
-  "version": "1.2.0",
-  "description": "Generic reusable cropper - 1 tool + cropper.config.mjs per project - webp+avif - no collision",
+  "version": "1.3.0",
+  "description": "Generic cropper - config per project - pwsh copy/clean/deploy - mozjpeg fallback ${name}.jpg",
   "type": "module",
   "bin": {
     "cropper": "./cropper.mjs",
@@ -14,36 +14,32 @@
     "clean": "pwsh -Command \". ./init-cropper.ps1; Clear-CropperDist\"",
     "copy": "pwsh -Command \". ./init-cropper.ps1; Copy-CropperDist\"",
     "copy:box-lunch": "pwsh -Command \". ./init-cropper.ps1; Copy-CropperDist -Services box-lunch\"",
-    "copy:multi": "pwsh -Command \". ./init-cropper.ps1; Copy-CropperDist -Services @('box-lunch','canapes')\"",
     "crop": "node cropper.mjs --config=cropper.config.delisnack.mjs",
     "crop:manifest": "node cropper.mjs --config=cropper.config.delisnack.mjs --manifest",
     "crop:box-lunch": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch --manifest",
-    "crop:2": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch,canapes --manifest",
-    "crop:all": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=all --manifest",
+    "crop:2": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch,canapes --manifest --fallback",
+    "crop:all": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=all --manifest --fallback",
     "deploy": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services all\"",
-    "deploy:box-lunch": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services box-lunch\"",
-    "deploy:coffee-break": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services coffee-break\""
+    "deploy:box-lunch": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services box-lunch\""
   },
   "keywords": [
     "sharp",
-    "image",
-    "crop",
     "webp",
     "avif",
-    "responsive",
-    "cli"
+    "mozjpeg",
+    "pwsh",
+    "cropper"
   ],
   "license": "MIT",
   "dependencies": {
     "sharp": "^0.35.4"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "fs-extra": "^11.2.0"
+    "@types/node": "^24.0.0"
   },
   "engines": {
     "node": ">=24.0.0",
-    "pnpm": ">=12.4.1"
+    "pnpm": ">=12.4.2"
   },
   "packageManager": "pnpm@12.4.2"
 }

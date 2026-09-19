@@ -38,13 +38,12 @@ function toArray(val) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-
 const CONFIG_PATH = args.config || "./cropper.config.mjs";
 const OUTPUT_ROOT = args.out || "./dist";
 const GENERATE_MANIFEST = !!args.manifest;
+const GENERATE_FALLBACK = !!args.fallback; // --fallback flag
 const FILTER_SERVICE_RAW = args.service || "all";
 const FILTER_PROFILE_RAW = args.profile || "all";
-
 const FILTER_SERVICES =
     FILTER_SERVICE_RAW === "all" ? ["all"] : toArray(FILTER_SERVICE_RAW);
 const FILTER_PROFILES =
@@ -88,9 +87,10 @@ const SERVICES = config.SERVICES || null;
 const INPUT_ROOT = config.INPUT_ROOT || "./input";
 const OUTPUT_STRUCTURE =
     config.OUTPUT_STRUCTURE || (SERVICES ? "service/profile" : "profile");
+const FALLBACK_ENABLED = config.FALLBACK_JPG ?? true; // global toggle
+const FALLBACK_Q = config.FALLBACK_Q || 75;
 
 await fs.mkdir(OUTPUT_ROOT, { recursive: true });
-
 const list = async dir => {
     try {
         return (await fs.readdir(dir)).filter(f =>
@@ -113,11 +113,17 @@ async function processOne(
     const files = await list(inputDir);
     if (files.length === 0) return false;
     await fs.mkdir(outDir, { recursive: true });
+    const minW = Math.min(...profile.widths);
+    const shouldFallback =
+        (GENERATE_FALLBACK || FALLBACK_ENABLED || profile.fallback) &&
+        profile.fallback !== false;
+
     for (const file of files) {
         const name = path.parse(file).name;
         const inputPath = path.join(inputDir, file);
         const key = serviceName ? `${serviceName}/${name}` : name;
         manifest[key] ??= [];
+
         for (const w of profile.widths) {
             const { h } = s(w, profile.ratio);
             const base = `${name}-${w}`;
@@ -148,15 +154,30 @@ async function processOne(
                 avif: relAvif
             });
         }
+
+        // mozjpeg fallback: smallest width, named ${name}.jpg
+        if (shouldFallback) {
+            const { h } = s(minW, profile.ratio);
+            const fallbackPath = path.join(outDir, `${name}.jpg`);
+            await sharp(inputPath)
+                .resize(minW, h, { fit: "cover", position: "attention" })
+                .jpeg({
+                    mozjpeg: true,
+                    quality: profile.fallbackQ || FALLBACK_Q,
+                    chromaSubsampling: "4:4:4"
+                })
+                .toFile(fallbackPath);
+            // console.log(`  ↳ fallback ${name}.jpg (${minW}w)`);
+        }
+
         console.log(
-            `✓ ${serviceName ? serviceName + "/" : ""}${profileName} ${file} -> ${profile.widths.length * 2} files`
+            `✓ ${serviceName ? serviceName + "/" : ""}${profileName} ${file} -> ${profile.widths.length * 2} + ${shouldFallback ? "1 jpg fallback" : ""}`
         );
     }
     return true;
 }
 
 let didAny = false;
-
 if (SERVICES) {
     const targetServices = FILTER_SERVICES.includes("all")
         ? SERVICES
@@ -164,7 +185,6 @@ if (SERVICES) {
     const targetProfiles = FILTER_PROFILES.includes("all")
         ? Object.keys(PROFILES)
         : FILTER_PROFILES;
-
     for (const service of targetServices) {
         for (const profileName of targetProfiles) {
             const p = PROFILES[profileName];
