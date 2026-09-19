@@ -1,13 +1,101 @@
-# image-cropper — delisnack version
+# image-cropper
 
-Cropper for `C:\laragon\www\delisnack\public\assets\images\services\`
+Tiny, generic CLI cropper. One tool, many projects.
 
-## Final folder structure (proposed)
+Built with `sharp` + `pnpm`. Separated from your PHP projects - same idea as an icon builder. You run it locally/CI, it generates `webp` + `avif`, you copy `dist/` to production. No Node runtime on server.
 
-Stop using flat `desktop-800.avif` at root. New structure, per service, per profile, no collisions:
+Solves the PHP GD/Imagick AVIF problem and the `${name}-${w}` collision problem by using subfolders per profile.
+
+## How it works: 1 tool + 1 config per project
+
+Don't make a `cropper.mjs` per project. Keep one generic `cropper.mjs` and add a `cropper.config.mjs` per project, like `tailwind.config.js`.
 
 ```
-public/assets/images/services/
+my-project/
+├── cropper.config.mjs  <- PROFILES + SERVICES for this project
+├── input/
+│   ├── box-lunch/
+│   │   ├── hero_mobile/
+│   │   └── menu_mobile/
+│   └── canapes/
+└── dist/               <- generated
+```
+
+If `cropper.config.mjs` exists, it is loaded. If not, defaults are used.
+
+```js
+// cropper.config.mjs
+export const INPUT_ROOT = "./input";
+export const OUTPUT_STRUCTURE = "service/profile"; // service/profile | profile | flat
+
+export const SERVICES = ["box-lunch", "canapes", "coffee-break"];
+
+export const PROFILES = {
+  hero_mobile: { ratio: 4/5, widths: [412, 824], webpQ: 75, avifQ: 55 },
+  hero_desktop: { ratio: 16/9, widths: [1024, 1440], webpQ: 75, avifQ: 55 },
+  menu_mobile: { ratio: 3/2, widths: [390, 780], webpQ: 70, avifQ: 50 },
+};
+```
+
+- `w = x, h = y` - cartesian, x always first. `h = Math.round(w / ratio)`
+- `base = ${name}-${w}` - no profile in filename, collision avoided by folder
+
+## Requirements
+
+- Node.js >= 24 (you're on v24.21.0)
+- pnpm >= 12.4.1 (you're on 12.4.1)
+- sharp ^0.35.4
+
+## Install
+
+```bash
+git clone https://github.com/david-gmz/image-cropper
+cd image-cropper
+pnpm install
+```
+
+## Examples
+
+Three example configs are included:
+
+- `cropper.config.delisnack.mjs` - your delisnack project with SERVICES
+- `cropper.config.generic.mjs` - flat mode, no SERVICES
+- `cropper.config.blog.mjs` - posts / projects / authors
+
+Copy one:
+
+```bash
+cp cropper.config.delisnack.mjs cropper.config.mjs
+# or
+cp cropper.config.generic.mjs cropper.config.mjs
+```
+
+## CLI
+
+```bash
+pnpm crop                          # all services/profiles
+pnpm crop --service=box-lunch      # only box-lunch
+pnpm crop --manifest               # + manifest.json
+pnpm crop --config=./my.config.mjs --out=./public/cropped
+
+# npm scripts
+pnpm run crop:box-lunch
+pnpm run deploy   # crop + copy to Laragon
+```
+
+Flags:
+- `--service=all|box-lunch|canapes`  filter service (only if SERVICES defined)
+- `--profile=all|box-lunch|canapes`  filter profile (only if PROFILE defined)
+- `--out=path` output root (default ./dist)
+- `--config=path` config file (default ./cropper.config.mjs)
+- `--manifest` generate manifest.json
+
+## Output structure
+
+With `OUTPUT_STRUCTURE = "service/profile"` (delisnack):
+
+```
+dist/
 ├── box-lunch/
 │   ├── hero_mobile/          # was box-lunch-hero-*.avif at root -> now here
 │   │   ├── hero-412.webp
@@ -29,77 +117,89 @@ public/assets/images/services/
 │   ├── hero_mobile/
 │   ├── hero_desktop/
 │   └── menu_mobile/
-├── coffee-break/
-├── snack-cart/
-└── taquiza/
-```
-
-### Input (your project `image-cropper/`)
-
-Mirror the output:
-
-```
-input/
-├── box-lunch/
-│   ├── hero_mobile/      -> put original hero vertical jpg here
-│   ├── hero_desktop/     -> original hero horizontal
-│   ├── menu_mobile/
-│   └── menu_desktop/
+│       ├── ejecutivo-390.webp
+│       └── gourmet-390.webp
 ├── canapes/
-│   ├── hero_mobile/
-│   └── hero_desktop/
-└── ...
+└── manifest.json  # only with --manifest
 ```
 
-### Why this is better
+With `OUTPUT_STRUCTURE = "profile"` (generic):
 
-1.  Your old `box-lunch-hero-1024.avif` at root -> now `box-lunch/hero_desktop/hero-1024.avif`. No more prefix hell.
-2.  `ejecutivo-480`, `gourmet-480`, `premium-480` were all mixed in `box-lunch/` root. Now they live in `menu_mobile/` and `menu_desktop/` subfolders.
-3.  `${name}-${w}` works because path includes profile: `box-lunch/menu_mobile/ejecutivo-390` vs `box-lunch/menu_desktop/ejecutivo-360` no longer collides.
+```
+dist/
+├── cards_mobile/
+│   ├── burger-390.webp
+│   └── burger-390.avif
+└── cards_desktop/
+```
 
-## Usage
+No more `${name}-${w}` collisions because `box-lunch/menu_mobile/ejecutivo-390` and `box-lunch/menu_desktop/ejecutivo-360` live in different folders.
+
+### New pnpm scripts added
+
+```json
+"crop:2": "box-lunch,canapes",
+"crop:3": "box-lunch,canapes,coffee-break",
+"crop:box+canapes": "same as crop:2 - easier to remember"
+```
+
+Usage:
 
 ```bash
-# all services
-pnpm run crop
-pnpm run crop:manifest
+pnpm run crop:2          # box-lunch + canapes
+pnpm run crop:3          # box-lunch + canapes + coffee-break
+pnpm run crop:box+canapes # same as crop:2
 
-# only one service (faster dev loop)
-pnpm run crop:box-lunch
-node cropper.mjs --service=box-lunch --manifest
-
-# deploy to Laragon
-pnpm run deploy
-# or custom DEST
-DEST=C:/laragon/www/delisnack/public/assets/images/services 
-pnpm run copy
+# or manual:
+node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch,canapes --manifest
+node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch --service=canapes --manifest
 ```
 
-## Profiles
+### New PowerShell API
 
-Defined in cropper.mjs:
+```powershell
+. ./init-cropper.ps1
 
-```js
-hero_mobile: 1/2  -> 412, 824, 1236
-hero_desktop: 16/9 -> 1024, 1440
-menu_mobile: 3/2  -> 390, 780, 1170
-menu_desktop: 2   -> 360, 720
+# CLEAN - cross-platform, works on Windows (rm -rf fails on Windows)
+Clear-CropperDist
+Clear-CropperDist -Dist ./dist -WhatIf
+
+# COPY - no more copy:box-lunch per service in package.json
+Copy-CropperDist                                    # copy ALL dist/ -> Laragon
+Copy-CropperDist -Services box-lunch                # only box-lunch
+Copy-CropperDist -Services @("box-lunch","canapes") # 2 services
+Copy-CropperDist -Services coffee-break -DestRoot "C:/other/project/public"
+
+# DEPLOY = crop + copy in one command
+Deploy-Cropper -Services box-lunch
+Deploy-Cropper -Services @("box-lunch","canapes","coffee-break")
+Deploy-Cropper -Services all                        # all 6 services
+Deploy-Cropper -Services box-lunch -Profiles hero_desktop
 ```
 
-w = x, h = y, h = round(w / ratio)
+### pnpm shortcuts (still work, now call pwsh)
 
-## What changed
-1. 1 tool + 1 config per project pattern explained - like Tailwind
-2. cropper.config.mjs docs with PROFILES, SERVICES, INPUT_ROOT, OUTPUT_STRUCTURE
-3. Two modes:
-    - With SERVICES: `input/<service>/<profile>/ → dist/<service>/<profile>/ (delisnack)`
-    - Without: `input/<profile>/ → dist/<profile>/ (all your other projects)`
-4. New CLI flags `--service, --config, --manifest, --out`
-5. Fixed the collision explanation and w=x, h=y
-
-Then in each project just copy the right config:
-
-```Bash
-cp cropper.config.delisnack.mjs ./cropper.config.mjs  # in delisnack
-cp cropper.config.generic.mjs ./cropper.config.mjs    # in other projects
+```bash
+pnpm run clean              # -> Clear-CropperDist
+pnpm run copy               # -> Copy-CropperDist (all)
+pnpm run copy:box-lunch     # -> Copy-CropperDist -Services box-lunch
+pnpm run deploy             # -> Deploy-Cropper -Services all
+pnpm run deploy:box-lunch   # -> Deploy-Cropper -Services box-lunch
+pnpm run deploy:coffee-break # NEW - no need to edit JSON anymore, just use pwsh directly if you want more
 ```
+
+**What do I think?** Your idea is better:
+- Node for cropping (sharp needs Node)
+- PowerShell for file ops (copy/clean/deploy) — because `Copy-Item`, `Remove-Item` are native, handle Windows paths `C:\laragon\...` correctly, and you can pass arrays `@("box-lunch","coffee-break")` without editing `package.json` every time.
+
+So now `package.json` has only 2 generic copy scripts, and everything else you do via `Copy-CropperDist -Services ...` directly in pwsh.
+
+## Why separate tool?
+
+- PHP 8.5 GD often lacks AVIF. Sharp does it.
+- No Node in production. Build once, commit dist.
+- Reusable across all your projects via config.
+
+## License
+
+MIT

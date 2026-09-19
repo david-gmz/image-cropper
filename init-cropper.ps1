@@ -1,3 +1,4 @@
+
 function New-CropperInputTree {
     <#
         .SYNOPSIS
@@ -230,5 +231,147 @@ if ($MyInvocation.InvocationName -ne '.') {
     } else {
         Write-Host "No cropper.config.mjs found. Creating generic tree..." -ForegroundColor Yellow
         New-CropperInputTree -WithReadme
+    }
+}
+
+function Clear-CropperDist {
+    <#
+        .SYNOPSIS
+            Cleans the dist folder (cross-platform).
+
+        .DESCRIPTION
+            Empties ./dist but keeps the folder. Uses fs-extra equivalent in PowerShell.
+
+        .EXAMPLE
+            Clear-CropperDist
+            Clear-CropperDist -WhatIf
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param([string]$Dist = "./dist")
+    if (Test-Path $Dist) {
+        if ($PSCmdlet.ShouldProcess($Dist, "Empty dist folder")) {
+            Get-ChildItem $Dist -Recurse -Force | Remove-Item -Force -Recurse
+            Write-Host "✓ Cleaned $Dist" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "ℹ $Dist does not exist" -ForegroundColor Yellow
+    }
+}
+
+function Copy-CropperDist {
+    <#
+        .SYNOPSIS
+            Copies dist to Laragon/public (or any dest), supports single or multiple services.
+
+        .DESCRIPTION
+            Replaces all those pnpm run copy:box-lunch, copy:coffee-break scripts.
+            One function, any service.
+
+            By default copies everything: dist/ -> C:/laragon/www/delisnack/public/assets/images/services
+
+        .PARAMETER Services
+            One or more services to copy. If empty, copies whole dist.
+            Example: @("box-lunch") or @("box-lunch","canapes")
+
+        .PARAMETER DestRoot
+            Destination root. Default from env DEST or C:/laragon/www/delisnack/public/assets/images/services
+
+        .PARAMETER DistRoot
+            Source dist root. Default ./dist
+
+        .EXAMPLE
+            Copy-CropperDist
+            Copy-CropperDist -Services box-lunch
+            Copy-CropperDist -Services @("box-lunch","canapes","coffee-break")
+            Copy-CropperDist -Services coffee-break -DestRoot "C:/laragon/www/delisnack/public/assets/images/services"
+
+        .EXAMPLE
+            # override dest via env
+            $env:DEST="C:/other/project/public/images"
+            Copy-CropperDist -Services box-lunch
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [string[]]$Services,
+        [string]$DestRoot = $env:DEST,
+        [string]$DistRoot = "./dist"
+    )
+    if (-not $DestRoot) {
+        $DestRoot = "C:/laragon/www/delisnack/public/assets/images/services"
+    }
+
+    if (-not (Test-Path $DistRoot)) {
+        Write-Host "⚠ $DistRoot does not exist, run crop first" -ForegroundColor Red
+        return
+    }
+
+    if (-not $Services -or $Services.Count -eq 0) {
+        # copy all
+        $dest = $DestRoot
+        if ($PSCmdlet.ShouldProcess("$DistRoot -> $dest", "Copy all")) {
+            New-Item -ItemType Directory -Path $dest -Force | Out-Null
+            Copy-Item -Path "$DistRoot/*" -Destination $dest -Recurse -Force
+            Write-Host "✓ Copied $DistRoot -> $dest" -ForegroundColor Green
+        }
+    } else {
+        foreach ($svc in $Services) {
+            $src = Join-Path $DistRoot $svc
+            if (-not (Test-Path $src)) {
+                Write-Host "⚠ $src not found, skipping $svc" -ForegroundColor Yellow
+                continue
+            }
+            $dest = Join-Path $DestRoot $svc
+            if ($PSCmdlet.ShouldProcess("$src -> $dest", "Copy $svc")) {
+                New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                Copy-Item -Path "$src/*" -Destination $dest -Recurse -Force
+                Write-Host "✓ Copied $src -> $dest" -ForegroundColor Green
+            }
+        }
+    }
+}
+
+function Deploy-Cropper {
+    <#
+        .SYNOPSIS
+            Deploys: crops then copies, in one command.
+
+        .DESCRIPTION
+            Replaces pnpm run deploy and deploy:box-lunch.
+            You can pass any service list and it will crop + copy only those.
+
+        .PARAMETER Services
+            Services to crop & copy. Default: all
+
+        .PARAMETER Config
+            Config file. Default: cropper.config.delisnack.mjs
+
+        .PARAMETER Profiles
+            Optional profile filter.
+
+        .EXAMPLE
+            Deploy-Cropper -Services box-lunch
+            Deploy-Cropper -Services @("box-lunch","canapes") -Profiles @("hero_desktop")
+            Deploy-Cropper -Services all
+    #>
+    [CmdletBinding()]
+    param(
+        [string[]]$Services = @("all"),
+        [string[]]$Profiles,
+        [string]$Config = "cropper.config.delisnack.mjs",
+        [string]$DestRoot = $env:DEST
+    )
+    $svcArg = ($Services -join ",")
+    $profileArg = if ($Profiles) { "--profile=$($Profiles -join ',')" } else { "" }
+    $cmd = "node cropper.mjs --config=$Config --service=$svcArg --manifest $profileArg".Trim()
+    Write-Host "→ $cmd" -ForegroundColor Cyan
+    Invoke-Expression $cmd
+    if ($LASTEXITCODE -eq 0) {
+        if ($Services -contains "all" -or $Services.Count -eq 0) {
+            Copy-CropperDist -DestRoot $DestRoot
+        } else {
+            Copy-CropperDist -Services $Services -DestRoot $DestRoot
+        }
+    } else {
+        Write-Host "⚠ Crop failed, not copying" -ForegroundColor Red
     }
 }

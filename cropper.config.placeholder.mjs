@@ -14,27 +14,15 @@ export const SERVICES = [
 ];
 
 export const PROFILES = {
-    menu_mobile: {
+    placeholder_3_2: {
         ratio: 3 / 2,
-        widths: [390, 780, 1170],
+        widths: [360, 390, 720, 780, 1170],
         webpQ: 70,
         avifQ: 50
     },
-    menu_desktop: {
+    placeholder_2_1: {
         ratio: 2,
-        widths: [360, 720],
-        webpQ: 70,
-        avifQ: 50
-    },
-    cards_mobile: {
-        ratio: 2, // 2:1
-        widths: [390, 780, 1170],
-        webpQ: 70,
-        avifQ: 50
-    },
-    cards_desktop: {
-        ratio: 3 / 2, // 3:2
-        widths: [360, 720],
+        widths: [360, 390, 720, 780, 1170],
         webpQ: 70,
         avifQ: 50
     },
@@ -45,7 +33,7 @@ export const PROFILES = {
     //     webpQ: 80,
     //     avifQ: 55
     // },
-    hero_service_desktop: {
+    placeholder_hero: {
         ratio: 5 / 4,
         widths: [480, 960],
         webpQ: 75,

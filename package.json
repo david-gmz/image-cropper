@@ -8,13 +8,21 @@
     "image-cropper": "./cropper.mjs"
   },
   "scripts": {
-    "crop": "node cropper.mjs",
-    "crop:manifest": "node cropper.mjs --manifest",
-    "crop:box-lunch": "node cropper.mjs --service=box-lunch",
-    "crop:all": "node cropper.mjs --service=all --manifest",
-    "clean": "node -e \"import('fs-extra').then(m=>m.default.emptyDir('./dist'))\"",
-    "copy": "node -e \"import fs from 'fs-extra'; const dest = process.env.DEST || 'C:/laragon/www/delisnack/public/assets/images/services'; await fs.ensureDir(dest); await fs.copy('./dist', dest, {overwrite:true}); console.log('\u2713 Copied to '+dest)\"",
-    "deploy": "node cropper.mjs --service=all --manifest && pnpm run copy"
+    "init": "pwsh -File ./init-cropper.ps1",
+    "init:flat": "pwsh -Command \". ./init-cropper.ps1; New-CropperInputTree -Flat -WithReadme\"",
+    "init:service": "pwsh -Command \". ./init-cropper.ps1; New-CropperInputTree -FromConfig ./cropper.config.delisnack.mjs -WithReadme\"",
+    "clean": "pwsh -Command \". ./init-cropper.ps1; Clear-CropperDist\"",
+    "copy": "pwsh -Command \". ./init-cropper.ps1; Copy-CropperDist\"",
+    "copy:box-lunch": "pwsh -Command \". ./init-cropper.ps1; Copy-CropperDist -Services box-lunch\"",
+    "copy:multi": "pwsh -Command \". ./init-cropper.ps1; Copy-CropperDist -Services @('box-lunch','canapes')\"",
+    "crop": "node cropper.mjs --config=cropper.config.delisnack.mjs",
+    "crop:manifest": "node cropper.mjs --config=cropper.config.delisnack.mjs --manifest",
+    "crop:box-lunch": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch --manifest",
+    "crop:2": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=box-lunch,canapes --manifest",
+    "crop:all": "node cropper.mjs --config=cropper.config.delisnack.mjs --service=all --manifest",
+    "deploy": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services all\"",
+    "deploy:box-lunch": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services box-lunch\"",
+    "deploy:coffee-break": "pwsh -Command \". ./init-cropper.ps1; Deploy-Cropper -Services coffee-break\""
   },
   "keywords": [
     "sharp",

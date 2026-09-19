@@ -4,18 +4,51 @@ import fs from "fs/promises";
 import path from "path";
 import { pathToFileURL } from "url";
 
-const args = Object.fromEntries(
-    process.argv
-        .slice(2)
-        .map(a => a.replace(/^--/, "").split("="))
-        .map(([k, v]) => [k, v || true])
-);
+// Parse args supporting repeats: --service=a --service=b  and comma lists
+function parseArgs(argv) {
+    const args = {};
+    for (const raw of argv) {
+        if (!raw.startsWith("--")) continue;
+        const eq = raw.indexOf("=");
+        let key, val;
+        if (eq === -1) {
+            key = raw.slice(2);
+            val = true;
+        } else {
+            key = raw.slice(2, eq);
+            val = raw.slice(eq + 1);
+        }
+        if (args[key] === undefined) args[key] = val;
+        else if (Array.isArray(args[key])) args[key].push(val);
+        else args[key] = [args[key], val];
+    }
+    return args;
+}
+function toArray(val) {
+    if (!val) return [];
+    const arr = Array.isArray(val) ? val : [val];
+    return arr.flatMap(v =>
+        typeof v === "string"
+            ? v
+                  .split(",")
+                  .map(s => s.trim())
+                  .filter(Boolean)
+            : [v]
+    );
+}
+
+const args = parseArgs(process.argv.slice(2));
 
 const CONFIG_PATH = args.config || "./cropper.config.mjs";
 const OUTPUT_ROOT = args.out || "./dist";
 const GENERATE_MANIFEST = !!args.manifest;
-const FILTER_SERVICE = args.service || "all";
-const FILTER_PROFILE = args.profile || "all";
+const FILTER_SERVICE_RAW = args.service || "all";
+const FILTER_PROFILE_RAW = args.profile || "all";
+
+const FILTER_SERVICES =
+    FILTER_SERVICE_RAW === "all" ? ["all"] : toArray(FILTER_SERVICE_RAW);
+const FILTER_PROFILES =
+    FILTER_PROFILE_RAW === "all" ? ["all"] : toArray(FILTER_PROFILE_RAW);
 
 const s = (w, ratio) => ({ w, h: Math.round(w / ratio) });
 
@@ -25,6 +58,12 @@ try {
     await fs.access(full);
     config = await import(pathToFileURL(full).href);
     console.log(`✓ Loaded config: ${CONFIG_PATH}`);
+    if (FILTER_SERVICES.length > 1 || FILTER_SERVICES[0] !== "all") {
+        console.log(`  → Filtering services: ${FILTER_SERVICES.join(", ")}`);
+    }
+    if (FILTER_PROFILES.length > 1 || FILTER_PROFILES[0] !== "all") {
+        console.log(`  → Filtering profiles: ${FILTER_PROFILES.join(", ")}`);
+    }
 } catch {
     console.log(`ℹ No config found at ${CONFIG_PATH}, using defaults`);
 }
@@ -119,10 +158,12 @@ async function processOne(
 let didAny = false;
 
 if (SERVICES) {
-    const targetServices =
-        FILTER_SERVICE === "all" ? SERVICES : [FILTER_SERVICE];
-    const targetProfiles =
-        FILTER_PROFILE === "all" ? Object.keys(PROFILES) : [FILTER_PROFILE];
+    const targetServices = FILTER_SERVICES.includes("all")
+        ? SERVICES
+        : FILTER_SERVICES;
+    const targetProfiles = FILTER_PROFILES.includes("all")
+        ? Object.keys(PROFILES)
+        : FILTER_PROFILES;
 
     for (const service of targetServices) {
         for (const profileName of targetProfiles) {
@@ -149,8 +190,9 @@ if (SERVICES) {
         }
     }
 } else {
-    const targetProfiles =
-        FILTER_PROFILE === "all" ? Object.keys(PROFILES) : [FILTER_PROFILE];
+    const targetProfiles = FILTER_PROFILES.includes("all")
+        ? Object.keys(PROFILES)
+        : FILTER_PROFILES;
     for (const profileName of targetProfiles) {
         const p = PROFILES[profileName];
         if (!p) {
